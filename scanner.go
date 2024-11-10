@@ -43,6 +43,19 @@ func checkSum(data []byte) uint16 {
 	return uint16(^sum)
 }
 
+
+func tcpCheckSum(srcIP net.IP, dstIP net.IP, tcpSegment []byte) uint16 {
+	pseudoHeader := make([]byte, 12)
+	copy(pseudoHeader[0:4], srcIP)
+	copy(pseudoHeader[4:8], dstIP)
+	pseudoHeader[8] = 0
+	pseudoHeader[9] = syscall.IPPROTO_TCP
+	binary.BigEndian.PutUint16(pseudoHeader[10:12], uint16(len(tcpSegment)))
+
+	sumData := append(pseudoHeader, tcpSegment...)
+	return checkSum(sumData)
+}
+
 func createSynPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16) []byte {
 
 	readyToUseSrcIP := net.ParseIP(srcIP).To4()
@@ -68,10 +81,24 @@ func createSynPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16)
 	binary.BigEndian.PutUint16(packet[10:12], checkSum(packet[:20]))
 
 	// TCP-Header
-	
+	binary.BigEndian.PutUint16(packet[20:22], srcPort) // Source Port
+	binary.BigEndian.PutUint16(packet[22:24], dstPort) // Destination Port
+	binary.BigEndian.PutUint32(packet[24:28], 0) // Sequence number
+	binary.BigEndian.PutUint32(packet[28:32], 0) // Confirmation number
+	packet[32] = 0x50 // Length of TCP-header (5 words = 5 * 4 = 20 bytes)
+	packet[33] = 0x02 // FLAGS (SYN = 0x02)
+	binary.BigEndian.PutUint16(packet[34:36], 64240) // Window
+	packet[36] = 0x00
+	packet[37] = 0x00
+	packet[38] = 0x00
+	packet[39] = 0x00
+
+	// Checksum of TCP-header
+	cs := tcpCheckSum(readyToUseSrcIP, readyToUseDstIP, packet[20:])
+	binary.BigEndian.PutUint16(packet[36:38], cs)
+
+	return packet
 }
-
-
 
 
 func main() {
