@@ -56,6 +56,7 @@ func tcpCheckSum(srcIP net.IP, dstIP net.IP, tcpSegment []byte) uint16 {
 	return checkSum(sumData)
 }
 
+
 func createSynPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16) []byte {
 
 	readyToUseSrcIP := net.ParseIP(srcIP).To4()
@@ -98,6 +99,36 @@ func createSynPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16)
 	binary.BigEndian.PutUint16(packet[36:38], cs)
 
 	return packet
+}
+
+
+func getSourceIP() string{
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			if ip != nil && ip.IsPrivate() && ip.To4() != nil {
+				return ip.String()
+			}
+		}
+	}
+	return ""
 }
 
 
@@ -148,5 +179,19 @@ func main() {
 
 	copy(sa.Addr[:], ip)
 
-	// TODO: I need to create syn packet
+	sourceIP := getSourceIP()
+	if sourceIP == "" {
+		log.Println("Failed to find source ip")
+		os.Exit(1)
+	}
+
+	packet := createSynPacket(sourceIP, ip.String(), uint16(50815), uint16(port))
+
+	err = syscall.Sendto(fd, packet, 0, sa)
+	if err != nil {
+		log.Println("Failed to send SYN packet")
+		os.Exit(1)
+	}
+
+	log.Println("SYN packet sent successfully")
 }
