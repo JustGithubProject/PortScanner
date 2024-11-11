@@ -214,8 +214,8 @@ func isRstSet(tcpFlags byte) bool {
 
 func main() {
 	// Destination host and port
-	host := "scanme.nmap.org"
-	port := 80
+	host := "chatgpt.com"
+	port := 446
 
 	// Converting host to IP
 	ips, err := net.LookupIP(host)
@@ -291,9 +291,13 @@ func main() {
 			os.Exit(1)
 		}
 		log.Println("RST packet sent to reset the connection")
+		os.Exit(1)
 	}
 
 	if isRst {
 		log.Printf("Port=%d is closed", port)
+		os.Exit(1)
 	}
+
+	log.Println("Failed to recognize port")
 }

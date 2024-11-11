@@ -8,4 +8,5 @@ port := 80
 
 
 ```go build scanner.go```
+
 ```sudo ./scanner```
