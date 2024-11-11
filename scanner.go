@@ -132,6 +132,45 @@ func getSourceIP() string{
 }
 
 
+func parseResponseBuffer(buffer []byte) byte {
+	/*
+	EXAMPLE:
+		(buffer[0] & 0xF) - it will reset high 4 bits
+		buffer[0] = 0x67
+		buffer[0] & 0xF = 0x7 --- (0x7 * 0x4 = 28 bytes)
+
+		buffer[0] = 0x9F
+		buffer[0] & 0xF = 0xF --- (0xF * 0x4 = 60 bytes)
+	*/
+	ipHeaderLen := (buffer[0] & 0xF) * 4
+	tcpHeader := buffer[ipHeaderLen: ipHeaderLen + 20]
+
+	tcpFlags := tcpHeader[13]
+
+	return tcpFlags
+}
+
+func isSyncAckSet(tcpFlags byte) bool {
+	/*
+	EXAMPLE:
+		0x12 -> SYN ACK
+		tcpFlags := 0x12
+		0001 0010 -> 0x1(0001) and 0x2(0010) = 0x12
+				&
+		0001 0010
+				=
+		0001 0010
+		---------
+		0x10 - ACK
+		0x02 - SYN
+	*/
+	return tcpFlags & 0x12 == 0x12
+}
+
+func isRstSet(tcpFlags byte) bool {
+	return tcpFlags & 0x04 != 0
+}
+
 func main() {
 	// Destination host and port
 	host := "scanme.nmap.org"
@@ -192,6 +231,23 @@ func main() {
 		log.Println("Failed to send SYN packet")
 		os.Exit(1)
 	}
-
 	log.Println("SYN packet sent successfully")
+
+	// Creating buffer for response
+	buffer := make([]byte, 1024)
+	syscall.Recvfrom(fd, buffer, 0)
+
+	tcpFlags := parseResponseBuffer(buffer)
+	isSyncAck := isSyncAckSet(tcpFlags)
+	isRst := isRstSet(tcpFlags)
+
+	if isSyncAck {
+		log.Printf("Port=%d is open", port)
+	}
+
+	if isRst {
+		log.Printf("Port=%d is closed", port)
+	}
+
+	
 }
