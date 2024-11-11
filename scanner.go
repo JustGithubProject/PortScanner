@@ -102,6 +102,47 @@ func createSynPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16)
 }
 
 
+func createRstPacket(srcIP string, dstIP string, srcPort uint16, dstPort uint16, seqNum uint32, ackNum uint32) []byte {
+    readyToUseSrcIP := net.ParseIP(srcIP).To4()
+    readyToUseDstIP := net.ParseIP(dstIP).To4()
+
+    packet := make([]byte, 40)
+
+    packet[0] = 0x45  
+    packet[1] = 0x00  // TOS
+    binary.BigEndian.PutUint16(packet[2:4], 40) 
+    binary.BigEndian.PutUint16(packet[4:6], 54321) 
+    packet[6] = 0x40 // FLAGS
+    packet[7] = 0x00 
+    packet[8] = 64   // TTL
+    packet[9] = syscall.IPPROTO_TCP
+    copy(packet[12:16], readyToUseSrcIP) 
+    copy(packet[16:20], readyToUseDstIP) 
+
+    // IP-Header checksum
+    binary.BigEndian.PutUint16(packet[10:12], checkSum(packet[:20]))
+
+    // TCP-Header
+    binary.BigEndian.PutUint16(packet[20:22], srcPort) 
+    binary.BigEndian.PutUint16(packet[22:24], dstPort) 
+    binary.BigEndian.PutUint32(packet[24:28], seqNum) 
+    binary.BigEndian.PutUint32(packet[28:32], ackNum) 
+    packet[32] = 0x50 
+    packet[33] = 0x04 // FLAG (RST)
+    binary.BigEndian.PutUint16(packet[34:36], 64240) 
+    packet[36] = 0x00
+    packet[37] = 0x00
+    packet[38] = 0x00
+    packet[39] = 0x00
+
+    cs := tcpCheckSum(readyToUseSrcIP, readyToUseDstIP, packet[20:])
+    binary.BigEndian.PutUint16(packet[36:38], cs)
+
+    return packet
+}
+
+
+
 func getSourceIP() string{
 	interfaces, err := net.Interfaces()
 	if err != nil {
@@ -224,9 +265,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	packet := createSynPacket(sourceIP, ip.String(), uint16(50815), uint16(port))
+	synPacket := createSynPacket(sourceIP, ip.String(), uint16(50815), uint16(port))
 
-	err = syscall.Sendto(fd, packet, 0, sa)
+	err = syscall.Sendto(fd, synPacket, 0, sa)
 	if err != nil {
 		log.Println("Failed to send SYN packet")
 		os.Exit(1)
@@ -243,11 +284,16 @@ func main() {
 
 	if isSyncAck {
 		log.Printf("Port=%d is open", port)
+		rstPacket := createRstPacket(sourceIP, ip.String(), uint16(50815), uint16(port), 0, 1)
+		err := syscall.Sendto(fd, rstPacket, 0, sa)
+		if err != nil {
+			log.Println("Failed to send rst packet")
+			os.Exit(1)
+		}
+		log.Println("RST packet sent to reset the connection")
 	}
 
 	if isRst {
 		log.Printf("Port=%d is closed", port)
 	}
-
-	
 }
